@@ -1,4 +1,4 @@
-python-telegram-bot==20.7
+python-telegram-bot[webhooks]==20.7
 selenium==4.15.0
 gspread==5.11.0
 google-auth-oauthlib==1.1.0
