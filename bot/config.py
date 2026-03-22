@@ -2,7 +2,8 @@
 import os
 
 # Telegram Bot Configuration
-BOT_TOKEN = os.getenv('BOT_TOKEN', '8651675539:AAHB3Of0D66_PQMoqLYseMoKJBv8ZDP4kKg')
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '8651675539:AAHB3Of0D66_PQMoqLYseMoKJBv8ZDP4kKg')
+BOT_TOKEN = TELEGRAM_BOT_TOKEN  # Alias for backward compatibility
 
 # Database Configuration
 DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://instagram_user:o7fYknqmWRdfL62UTq90QBq5pMucWN8b@dpg-d6vndnv5r7bs73etiab0-a/instagram_db_t9mg')
@@ -21,7 +22,7 @@ WEB_DASHBOARD_URL = os.getenv('WEB_DASHBOARD_URL', 'https://instaau.netlify.app'
 
 # Logging Configuration
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
-LOG_FILE = os.getenv('LOG_FILE', '/app/logs/bot.log')
+LOG_FILE = os.getenv('LOG_FILE', 'bot.log')  # Changed from /app/logs/bot.log to avoid permission issues
 
 # Database Connection Settings
 DB_POOL_SIZE = int(os.getenv('DB_POOL_SIZE', '5'))
