@@ -11,7 +11,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import pyotp
 from config import *
@@ -66,7 +66,6 @@ def get_temp_email():
     try:
         response = requests.get('https://mailvn.site')
         if response.status_code == 200:
-            # Extract email from response (simplified - would need proper parsing)
             email_match = re.search(r'([a-zA-Z0-9._%+-]+@mailvn\.site)', response.text)
             if email_match:
                 return email_match.group(1)
@@ -78,7 +77,6 @@ def get_temp_email():
 def download_profile_image():
     """Download AI-generated profile image"""
     try:
-        # Using thispersondoesnotexist.com for AI-generated faces
         response = requests.get('https://thispersondoesnotexist.com/image')
         if response.status_code == 200:
             with open('/tmp/profile.jpg', 'wb') as f:
@@ -90,7 +88,7 @@ def download_profile_image():
         return None
 
 def create_instagram_account(gmail_account, app_password, static_password):
-    """Main function to create Instagram account"""
+    """Main function to create Instagram account using Chrome"""
     driver = None
     start_time = time.time()
     
@@ -98,14 +96,20 @@ def create_instagram_account(gmail_account, app_password, static_password):
         # Log the start of account creation
         DatabaseUtils.add_automation_log("info", f"Starting Instagram account creation for {gmail_account}")
         
-        # Initialize WebDriver
+        # Initialize Chrome WebDriver (Render has Chrome pre-installed)
         options = Options()
         if HEADLESS_MODE:
             options.add_argument('--headless')
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--disable-gpu')
+        options.add_argument('--window-size=1920,1080')
+        options.add_argument('--disable-blink-features=AutomationControlled')
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option('useAutomationExtension', False)
         
-        driver = webdriver.Firefox(options=options)
+        driver = webdriver.Chrome(options=options)
+        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         driver.implicitly_wait(10)
         
         # Step 1: Instagram Signup
@@ -297,35 +301,10 @@ def create_instagram_account(gmail_account, app_password, static_password):
             driver.quit()
 
 def save_to_google_sheets(account_data):
-    """Save account data to Google Sheets"""
-    try:
-        import gspread
-        from google.oauth2.service_account import Credentials
-        
-        # Authenticate with Google Sheets
-        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=scope)
-        client = gspread.authorize(creds)
-        
-        # Open spreadsheet
-        spreadsheet = client.open(SPREADSHEET_NAME)
-        worksheet = spreadsheet.worksheet(WORKSHEET_NAME)
-        
-        # Append data
-        row_data = [
-            account_data['username'],
-            account_data['temp_email'],
-            account_data['password'],
-            account_data['secret_key'],
-            account_data['created_at'],
-            account_data['status']
-        ]
-        
-        worksheet.append_row(row_data)
-        logger.info("Account data saved to Google Sheets")
-        
-    except Exception as e:
-        logger.error(f"Error saving to Google Sheets: {e}")
+    """Save account data to database (Supabase) - Google Sheets removed for Render compatibility"""
+    # Data is already saved in database from create_instagram_account
+    logger.info(f"Account data for {account_data.get('username')} is already saved in Supabase")
+    return True
 
 def load_bot_state():
     """Load bot state from database"""
