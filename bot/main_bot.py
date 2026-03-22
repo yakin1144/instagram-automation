@@ -17,19 +17,11 @@ from automation_logic import *
 from database import DatabaseUtils, db_manager
 import sys
 
-# Configure logging
-log_dir = os.path.dirname(LOG_FILE)
-if log_dir and not os.path.exists(log_dir):
-    os.makedirs(log_dir, exist_ok=True)
-
+# Configure logging - FIXED: Use stdout only (no file writing issues)
 handlers = [logging.StreamHandler()]
-try:
-    handlers.insert(0, logging.FileHandler(LOG_FILE))
-except Exception:
-    pass
 
 logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL),
+    level=getattr(logging, LOG_LEVEL if 'LOG_LEVEL' in dir() else 'INFO'),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=handlers
 )
@@ -37,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 # Initialize Flask app for API
 api_app = Flask(__name__)
-CORS(api_app, origins=[WEB_DASHBOARD_URL])
+CORS(api_app, origins=[WEB_DASHBOARD_URL if 'WEB_DASHBOARD_URL' in dir() else '*'])
 
 # Initialize rate limiter
 limiter = Limiter(
@@ -54,6 +46,7 @@ class InstagramBot:
         self.is_running = False
         
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /start command"""
         welcome_message = """
 🤖 **Automated Instagram Account Creator Bot**
 
@@ -69,6 +62,7 @@ class InstagramBot:
         await update.message.reply_text(welcome_message)
     
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /help command"""
         help_message = """
 📚 **Bot Commands Guide**
 
@@ -86,12 +80,14 @@ class InstagramBot:
 • `/start_auto 5` - Start from 6th account
 • `/status` - Check current progress
 
-**Note:** The bot will process accounts sequentially and save all data to Google Sheets.
+**Note:** The bot will process accounts sequentially and save all data to PostgreSQL.
         """
         await update.message.reply_text(help_message)
     
     async def start_auto_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /start_auto command"""
         try:
+            # Check if automation is already running
             state = load_bot_state()
             if state['is_running']:
                 await update.message.reply_text(
@@ -99,11 +95,13 @@ class InstagramBot:
                 )
                 return
             
+            # Get starting index
             if context.args and context.args[0].isdigit():
                 start_index = int(context.args[0])
             else:
                 start_index = 0
             
+            # Load accounts and validate
             accounts = load_gmail_accounts()
             if not accounts:
                 await update.message.reply_text(
@@ -117,6 +115,7 @@ class InstagramBot:
                 )
                 return
             
+            # Start automation
             self.is_running = True
             self.automation_thread = threading.Thread(
                 target=self.run_automation,
@@ -125,14 +124,14 @@ class InstagramBot:
             self.automation_thread.daemon = True
             self.automation_thread.start()
             
+            # Send confirmation
             confirmation_message = f"""
 🚀 **Automation Started!**
 
 📊 **Configuration Loaded:**
 • Starting from index: {start_index}
 • Total accounts in queue: {len(accounts)}
-• Static password: **********
-• Headless mode: {HEADLESS_MODE}
+• Headless mode: {HEADLESS_MODE if 'HEADLESS_MODE' in dir() else True}
 
 ⏳ **Beginning account creation process...**
             """
@@ -140,19 +139,26 @@ class InstagramBot:
             
         except Exception as e:
             logger.error(f"Error starting automation: {e}")
-            await update.message.reply_text(f"❌ Error starting automation: {str(e)}")
+            await update.message.reply_text(
+                f"❌ Error starting automation: {str(e)}"
+            )
     
     async def stop_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /stop command"""
         try:
             state = load_bot_state()
             if not state['is_running']:
-                await update.message.reply_text("ℹ️ No automation is currently running.")
+                await update.message.reply_text(
+                    "ℹ️ No automation is currently running."
+                )
                 return
             
+            # Stop automation
             state['is_running'] = False
             save_bot_state(state)
             self.is_running = False
             
+            # Send stop confirmation
             stop_message = f"""
 🛑 **Automation Stopped!**
 
@@ -169,9 +175,12 @@ class InstagramBot:
             
         except Exception as e:
             logger.error(f"Error stopping automation: {e}")
-            await update.message.reply_text(f"❌ Error stopping automation: {str(e)}")
+            await update.message.reply_text(
+                f"❌ Error stopping automation: {str(e)}"
+            )
     
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /status command"""
         try:
             state = load_bot_state()
             accounts = load_gmail_accounts()
@@ -204,19 +213,25 @@ class InstagramBot:
             
         except Exception as e:
             logger.error(f"Error getting status: {e}")
-            await update.message.reply_text(f"❌ Error getting status: {str(e)}")
+            await update.message.reply_text(
+                f"❌ Error getting status: {str(e)}"
+            )
     
     def run_automation(self, start_index, chat_id):
+        """Main automation loop"""
         try:
+            # Load data
             accounts = load_gmail_accounts()
             static_password = load_static_password()
             
+            # Update state
             state = load_bot_state()
             state['is_running'] = True
             state['current_index'] = start_index
             state['started_at'] = time.strftime('%Y-%m-%d %H:%M:%S')
             save_bot_state(state)
             
+            # Process accounts
             for i in range(start_index, len(accounts)):
                 if not state['is_running']:
                     break
@@ -224,9 +239,11 @@ class InstagramBot:
                 account = accounts[i]
                 logger.info(f"Processing account {i+1}/{len(accounts)}: {account['email']}")
                 
+                # Send progress update
                 if chat_id:
                     asyncio.run(self.send_progress_update(chat_id, i+1, len(accounts), account['email']))
                 
+                # Create Instagram account
                 account_data = create_instagram_account(
                     account['email'],
                     account['app_password'],
@@ -234,28 +251,40 @@ class InstagramBot:
                 )
                 
                 if account_data:
-                    save_to_google_sheets(account_data)
+                    # Save to database
+                    save_to_database(account_data)
+                    
+                    # Update state
                     state['successful'] += 1
                     state['total_processed'] += 1
                     
+                    # Send success message
                     if chat_id:
                         asyncio.run(self.send_success_message(chat_id, i+1, account_data))
                 else:
+                    # Update state
                     state['failed'] += 1
                     state['total_processed'] += 1
                     
+                    # Send failure message
                     if chat_id:
                         asyncio.run(self.send_failure_message(chat_id, i+1, account['email']))
                 
+                # Update current index
                 state['current_index'] = i + 1
                 save_bot_state(state)
                 
-                if i < len(accounts) - 1:
+                # Delay between accounts
+                if i < len(accounts) - 1 and 'DELAY_BETWEEN_ACCOUNTS' in dir():
                     time.sleep(DELAY_BETWEEN_ACCOUNTS)
+                elif i < len(accounts) - 1:
+                    time.sleep(60)  # Default 60 seconds
             
+            # Send completion message
             if chat_id and state['is_running']:
                 asyncio.run(self.send_completion_message(chat_id, state))
             
+            # Update final state
             state['is_running'] = False
             save_bot_state(state)
             
@@ -265,6 +294,7 @@ class InstagramBot:
                 asyncio.run(self.send_error_message(chat_id, str(e)))
     
     async def send_progress_update(self, chat_id, current, total, email):
+        """Send progress update message"""
         try:
             message = f"""
 🔄 **Processing Account #{current} ({current}/{total})**
@@ -276,6 +306,7 @@ class InstagramBot:
             logger.error(f"Error sending progress update: {e}")
     
     async def send_success_message(self, chat_id, account_num, account_data):
+        """Send success message"""
         try:
             message = f"""
 ✅ **Account #{account_num} Created Successfully!**
@@ -284,10 +315,10 @@ class InstagramBot:
 • Username: {account_data['username']}
 • Temp Email: {account_data['temp_email']}
 • Password: **********
-• 2FA Key: {account_data['secret_key']}
+• 2FA Key: {account_data.get('secret_key', 'N/A')}
 • Status: Active
 
-💾 **Saved to Google Sheets**
+💾 **Saved to Database**
 ⏱️ **Processing time:** {account_data.get('processing_time', 'N/A')}
             """
             await self.bot.send_message(chat_id=chat_id, text=message)
@@ -295,6 +326,7 @@ class InstagramBot:
             logger.error(f"Error sending success message: {e}")
     
     async def send_failure_message(self, chat_id, account_num, email):
+        """Send failure message"""
         try:
             message = f"""
 ❌ **Account #{account_num} Failed!**
@@ -314,6 +346,7 @@ class InstagramBot:
             logger.error(f"Error sending failure message: {e}")
     
     async def send_completion_message(self, chat_id, state):
+        """Send completion message"""
         try:
             success_rate = 0
             if state['total_processed'] > 0:
@@ -328,10 +361,7 @@ class InstagramBot:
 • Failed: {state['failed']}
 • Total duration: {self.get_session_duration()}
 
-📁 **Data saved to Google Sheets:**
-• Usernames, emails, passwords, 2FA keys
-• Ready for distribution or further processing
-
+📁 **Data saved to PostgreSQL**
 🔄 **Use `/start_auto` to begin new session.**
             """
             await self.bot.send_message(chat_id=chat_id, text=message)
@@ -339,6 +369,7 @@ class InstagramBot:
             logger.error(f"Error sending completion message: {e}")
     
     async def send_error_message(self, chat_id, error):
+        """Send error message"""
         try:
             message = f"""
 ❌ **Automation Error!**
@@ -353,20 +384,25 @@ class InstagramBot:
             logger.error(f"Error sending error message: {e}")
     
     def get_session_duration(self):
+        """Calculate session duration"""
         state = load_bot_state()
-        if 'started_at' in state:
-            start_time = time.strptime(state['started_at'], '%Y-%m-%d %H:%M:%S')
-            current_time = time.localtime()
-            duration = time.mktime(current_time) - time.mktime(start_time)
-            return f"{int(duration // 3600)}h {int((duration % 3600) // 60)}m"
+        if 'started_at' in state and state['started_at'] != 'N/A':
+            try:
+                start_time = time.strptime(state['started_at'], '%Y-%m-%d %H:%M:%S')
+                current_time = time.localtime()
+                duration = time.mktime(current_time) - time.mktime(start_time)
+                return f"{int(duration // 3600)}h {int((duration % 3600) // 60)}m"
+            except:
+                return "N/A"
         return "N/A"
     
     def calculate_eta(self, state, accounts):
+        """Calculate estimated time to completion"""
         if not state['is_running'] or state['current_index'] >= len(accounts):
             return "N/A"
         
         remaining = len(accounts) - state['current_index']
-        avg_time_per_account = 5
+        avg_time_per_account = 5  # minutes
         eta_minutes = remaining * avg_time_per_account
         
         if eta_minutes < 60:
@@ -377,6 +413,7 @@ class InstagramBot:
             return f"{hours}h {minutes}m"
     
     def setup_handlers(self):
+        """Setup command handlers"""
         self.application.add_handler(CommandHandler("start", self.start_command))
         self.application.add_handler(CommandHandler("help", self.help_command))
         self.application.add_handler(CommandHandler("start_auto", self.start_auto_command))
@@ -389,32 +426,41 @@ class InstagramBot:
             self.setup_handlers()
             
             # Get PORT from environment (Render sets this)
-            port = int(os.environ.get('PORT', 5000))
+            port = int(os.environ.get('PORT', 10000))
+            host = os.environ.get('RENDER_EXTERNAL_HOSTNAME', 'localhost')
             
             # Use webhook instead of polling for Render
             logger.info(f"Starting bot with webhook on port {port}...")
-            
-            # Run Flask and Telegram together
-            from telegram.ext import webhooks
+            logger.info(f"Webhook URL: https://{host}/webhook/{BOT_TOKEN}")
             
             # Start the bot with webhook
             self.application.run_webhook(
                 listen='0.0.0.0',
                 port=port,
                 url_path=f'/webhook/{BOT_TOKEN}',
-                webhook_url=f'https://{os.environ.get("RENDER_EXTERNAL_HOSTNAME", "localhost")}/webhook/{BOT_TOKEN}'
+                webhook_url=f'https://{host}/webhook/{BOT_TOKEN}',
+                drop_pending_updates=True
             )
             
         except Exception as e:
-            logger.error(f"Error running bot: {e}")
+            logger.error(f"Error running bot with webhook: {e}")
+            logger.info("Falling back to polling mode...")
+            try:
+                self.application.run_polling(drop_pending_updates=True)
+            except Exception as e2:
+                logger.error(f"Polling also failed: {e2}")
 
 # API Endpoints for Web Dashboard
 @api_app.route('/api/bot/status')
 @limiter.limit("10 per minute")
 def api_bot_status():
+    """Get current bot status and statistics"""
     try:
         state = load_bot_state()
-        stats = DatabaseUtils.get_statistics()
+        if db_manager:
+            stats = DatabaseUtils.get_statistics()
+        else:
+            stats = {'total': 0, 'successful': 0, 'failed': 0, 'pending': 0, 'success_rate': 0}
         
         return jsonify({
             'status': 'online' if state['is_running'] else 'offline',
@@ -435,22 +481,26 @@ def api_bot_status():
 @api_app.route('/api/bot/start', methods=['POST'])
 @limiter.limit("5 per hour")
 def api_start_bot():
+    """Start automation process"""
     try:
         data = request.get_json()
         start_index = data.get('startIndex', 0) if data else 0
         
+        # Check if automation is already running
         state = load_bot_state()
         if state['is_running']:
             return jsonify({'error': 'Automation is already running'}), 400
         
+        # Validate start index
         accounts = load_gmail_accounts()
         if start_index >= len(accounts):
             return jsonify({'error': f'Start index {start_index} is out of range. Total accounts: {len(accounts)}'}), 400
         
+        # Start automation in background thread
         bot_instance = InstagramBot()
         bot_instance.automation_thread = threading.Thread(
             target=bot_instance.run_automation,
-            args=(start_index, None)
+            args=(start_index, None)  # No chat_id for API calls
         )
         bot_instance.automation_thread.daemon = True
         bot_instance.automation_thread.start()
@@ -467,12 +517,15 @@ def api_start_bot():
 @api_app.route('/api/bot/stop', methods=['POST'])
 @limiter.limit("5 per hour")
 def api_stop_bot():
+    """Stop automation process"""
     try:
         state = load_bot_state()
         if not state['is_running']:
             return jsonify({'error': 'No automation is currently running'}), 400
         
-        DatabaseUtils.update_bot_state(is_running=False)
+        # Stop automation
+        if db_manager:
+            DatabaseUtils.update_bot_state(is_running=False)
         
         return jsonify({
             'success': True,
@@ -485,16 +538,22 @@ def api_stop_bot():
 @api_app.route('/api/accounts')
 @limiter.limit("20 per minute")
 def api_get_accounts():
+    """Get Instagram accounts"""
     try:
+        if not db_manager:
+            return jsonify({'error': 'Database not available'}), 503
+            
         status = request.args.get('status')
         limit = int(request.args.get('limit', 100))
         offset = int(request.args.get('offset', 0))
         
         accounts = DatabaseUtils.get_instagram_accounts(status)
         
+        # Apply pagination
         total = len(accounts)
         accounts = accounts[offset:offset + limit]
         
+        # Convert to JSON-serializable format
         accounts_data = []
         for account in accounts:
             accounts_data.append({
@@ -503,7 +562,7 @@ def api_get_accounts():
                 'email': account.email,
                 'temp_email': account.temp_email,
                 'status': account.status,
-                'created_at': account.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'created_at': account.created_at.strftime('%Y-%m-%d %H:%M:%S') if account.created_at else None,
                 'processing_time': account.processing_time,
                 'error_message': account.error_message
             })
@@ -521,7 +580,11 @@ def api_get_accounts():
 @api_app.route('/api/logs')
 @limiter.limit("20 per minute")
 def api_get_logs():
+    """Get recent automation logs"""
     try:
+        if not db_manager:
+            return jsonify({'error': 'Database not available'}), 503
+            
         limit = int(request.args.get('limit', 50))
         logs = DatabaseUtils.get_recent_logs(limit)
         
@@ -532,7 +595,7 @@ def api_get_logs():
                 'level': log.level,
                 'message': log.message,
                 'account_id': log.account_id,
-                'created_at': log.created_at.strftime('%Y-%m-%d %H:%M:%S')
+                'created_at': log.created_at.strftime('%Y-%m-%d %H:%M:%S') if log.created_at else None
             })
         
         return jsonify({'logs': logs_data})
@@ -545,7 +608,12 @@ def api_get_logs():
 def health_check():
     """Health check endpoint for Render"""
     try:
-        db_healthy = db_manager.test_connection() if db_manager else False
+        db_healthy = False
+        if db_manager:
+            try:
+                db_healthy = db_manager.test_connection()
+            except:
+                db_healthy = False
         
         return jsonify({
             'status': 'healthy',
@@ -563,50 +631,138 @@ def health_check():
 def run_api_server():
     """Run Flask API server"""
     try:
-        port = int(os.environ.get('PORT', 5000))
+        port = int(os.environ.get('PORT', 10000))
         logger.info(f"Starting API server on port {port}...")
         api_app.run(host='0.0.0.0', port=port, debug=False)
     except Exception as e:
         logger.error(f"Error running API server: {e}")
 
+# Helper functions that might be missing
+def load_bot_state():
+    """Load bot state from database or file"""
+    try:
+        if db_manager:
+            state = DatabaseUtils.get_bot_state()
+            if state:
+                return {
+                    'is_running': state.is_running,
+                    'current_index': state.current_index,
+                    'total_processed': state.total_processed,
+                    'successful': state.successful_count,
+                    'failed': state.failed_count,
+                    'started_at': state.started_at.strftime('%Y-%m-%d %H:%M:%S') if state.started_at else 'N/A'
+                }
+    except:
+        pass
+    
+    # Fallback to file-based state
+    state_file = 'bot_state.json'
+    default_state = {
+        'is_running': False,
+        'current_index': 0,
+        'total_processed': 0,
+        'successful': 0,
+        'failed': 0,
+        'started_at': 'N/A'
+    }
+    
+    try:
+        if os.path.exists(state_file):
+            with open(state_file, 'r') as f:
+                return json.load(f)
+    except:
+        pass
+    
+    return default_state
+
+def save_bot_state(state):
+    """Save bot state to file (fallback)"""
+    try:
+        with open('bot_state.json', 'w') as f:
+            json.dump(state, f)
+    except Exception as e:
+        logger.error(f"Error saving bot state: {e}")
+
+def load_gmail_accounts():
+    """Load Gmail accounts from database"""
+    try:
+        if db_manager:
+            accounts = DatabaseUtils.get_unused_gmail_accounts()
+            if accounts:
+                return [{'email': acc.email, 'app_password': acc.app_password} for acc in accounts]
+    except:
+        pass
+    
+    # Fallback to file-based accounts
+    try:
+        with open('gmail_accounts.txt', 'r') as f:
+            accounts = []
+            for line in f:
+                if ':' in line:
+                    email, password = line.strip().split(':', 1)
+                    accounts.append({'email': email, 'app_password': password})
+            return accounts
+    except:
+        return []
+
+def load_static_password():
+    """Load static password for Instagram accounts"""
+    try:
+        with open('password.txt', 'r') as f:
+            return f.read().strip()
+    except:
+        return "DefaultPass123!"
+
+def save_to_database(account_data):
+    """Save Instagram account to database"""
+    try:
+        if db_manager:
+            DatabaseUtils.add_instagram_account(
+                username=account_data['username'],
+                email=account_data['temp_email'],
+                temp_email=account_data['temp_email'],
+                password=account_data['password'],
+                secret_key=account_data.get('secret_key'),
+                status='successful',
+                processing_time=account_data.get('processing_time')
+            )
+            return True
+    except Exception as e:
+        logger.error(f"Error saving to database: {e}")
+    return False
+
 if __name__ == "__main__":
+    logger.info("=" * 50)
+    logger.info("Starting Instagram Automation Bot")
+    logger.info("=" * 50)
+    
     # Initialize database
     try:
         if db_manager and db_manager.test_connection():
-            logger.info("Database connection successful")
+            logger.info("✅ Database connection successful")
         else:
-            logger.warning("Database connection not available - some features may be limited")
+            logger.warning("⚠️ Database connection not available - some features may be limited")
     except Exception as e:
-        logger.error(f"Database initialization error: {e}")
+        logger.error(f"❌ Database initialization error: {e}")
     
     # Get port from environment
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 10000))
     
     # Start Flask API server in a background thread
     api_thread = threading.Thread(target=run_api_server, daemon=True)
     api_thread.start()
-    logger.info(f"API server thread started")
+    logger.info(f"✅ API server thread started")
     
-    # Start Telegram bot with webhook (not polling)
+    # Start Telegram bot
     try:
         bot = InstagramBot()
-        
-        # Use webhook instead of polling for Render
-        bot.setup_handlers()
-        
-        logger.info(f"Starting Telegram bot with webhook on port {port}...")
-        
-        # Start the bot with webhook
-        bot.application.run_webhook(
-            listen='0.0.0.0',
-            port=port,
-            url_path=f'/webhook/{BOT_TOKEN}',
-            webhook_url=f'https://{os.environ.get("RENDER_EXTERNAL_HOSTNAME", "localhost")}/webhook/{BOT_TOKEN}',
-            drop_pending_updates=True
-        )
+        bot.run()
     except Exception as e:
-        logger.error(f"Error starting bot: {e}")
-        
-        # Fallback to polling if webhook fails
-        logger.info("Falling back to polling mode...")
-        bot.application.run_polling(drop_pending_updates=True)
+        logger.error(f"❌ Error starting bot: {e}")
+        logger.info("Retrying with polling mode...")
+        try:
+            bot = InstagramBot()
+            bot.setup_handlers()
+            bot.application.run_polling(drop_pending_updates=True)
+        except Exception as e2:
+            logger.error(f"❌ Polling also failed: {e2}")
