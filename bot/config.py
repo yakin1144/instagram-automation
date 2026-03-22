@@ -5,12 +5,12 @@ import os
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '8651675539:AAHB3Of0D66_PQMoqLYseMoKJBv8ZDP4kKg')
 BOT_TOKEN = TELEGRAM_BOT_TOKEN  # Alias for backward compatibility
 
-# Database Configuration
-DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://instagram_user:o7fYknqmWRdfL62UTq90QBq5pMucWN8b@dpg-d6vndnv5r7bs73etiab0-a/instagram_db_t9mg')
+# Database Configuration - Supabase
+DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:Yakin2007%40ziane@db.pemhxeyyxkutqjwvuzbf.supabase.co:5432/postgres')
 
-# Google Sheets Configuration
-SPREADSHEET_NAME = os.getenv('SPREADSHEET_NAME', 'Instagram Accounts Database')
-WORKSHEET_NAME = os.getenv('WORKSHEET_NAME', 'Accounts')
+# Google Sheets Configuration (Not used with Supabase)
+# SPREADSHEET_NAME = os.getenv('SPREADSHEET_NAME', 'Instagram Accounts Database')
+# WORKSHEET_NAME = os.getenv('WORKSHEET_NAME', 'Accounts')
 
 # Automation Settings
 HEADLESS_MODE = os.getenv('HEADLESS_MODE', 'False').lower() == 'true'
