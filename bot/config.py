@@ -2,10 +2,10 @@
 import os
 
 # Telegram Bot Configuration
-BOT_TOKEN = os.getenv('BOT_TOKEN', '8377225782:AAE3jApxu-Tuadu8Sot85pN9QNt3JHytg3o')
+BOT_TOKEN = os.getenv('BOT_TOKEN', '8651675539:AAHB3Of0D66_PQMoqLYseMoKJBv8ZDP4kKg')
 
 # Database Configuration
-DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://instagram_bot_db_80km_user:klys5axBI9deyq12UQ6jYgUUrulpLzWY@dpg-d3iab0gdl3ps73d25up0-a/instagram_bot_db_80km')
+DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://instagram_user:o7fYknqmWRdfL62UTq90QBq5pMucWN8b@dpg-d6vndnv5r7bs73etiab0-a/instagram_db_t9mg')
 
 # Google Sheets Configuration
 SPREADSHEET_NAME = os.getenv('SPREADSHEET_NAME', 'Instagram Accounts Database')
@@ -17,7 +17,7 @@ DELAY_BETWEEN_ACCOUNTS = int(os.getenv('DELAY_BETWEEN_ACCOUNTS', '30'))
 STATIC_PASSWORD = os.getenv('STATIC_PASSWORD', 'SecurePassword123!')
 
 # Web Dashboard Configuration
-WEB_DASHBOARD_URL = os.getenv('WEB_DASHBOARD_URL', 'https://your-netlify-app.netlify.app')
+WEB_DASHBOARD_URL = os.getenv('WEB_DASHBOARD_URL', 'https://instaau.netlify.app')
 
 # Logging Configuration
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
