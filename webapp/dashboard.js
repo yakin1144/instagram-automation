@@ -13,8 +13,8 @@ class InstagramDashboard {
         this.isRunning = false;
         this.updateInterval = null;
         
-        // Get bot API URL from environment or use default
-        this.BOT_API_URL = window.BOT_API_URL || 'https://insta-automation-bot.onrender.com';
+        // Get bot API URL - FIXED to use correct Render URL
+        this.BOT_API_URL = window.BOT_API_URL || 'https://instagram-automation-cj8a.onrender.com';
         
         this.init();
     }
@@ -52,6 +52,7 @@ class InstagramDashboard {
             this.updateUI();
         } catch (error) {
             this.showToast('Error loading initial data: ' + error.message, 'error');
+            console.error('Initial load error:', error);
         } finally {
             this.showLoading(false);
         }
@@ -59,12 +60,16 @@ class InstagramDashboard {
     
     async fetchBotStatus() {
         try {
-            const response = await fetch(`${BOT_API_URL}/api/bot/status`);
+            const url = `${this.BOT_API_URL}/api/bot/status`;
+            console.log('Fetching bot status from:', url);
+            
+            const response = await fetch(url);
             if (response.ok) {
                 const data = await response.json();
                 this.botStatus = data.status;
                 this.isRunning = data.is_running;
                 this.stats = data.stats;
+                console.log('Bot status:', data);
             } else {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
@@ -85,10 +90,14 @@ class InstagramDashboard {
     
     async fetchAccounts() {
         try {
-            const response = await fetch(`${BOT_API_URL}/api/accounts`);
+            const url = `${this.BOT_API_URL}/api/accounts`;
+            console.log('Fetching accounts from:', url);
+            
+            const response = await fetch(url);
             if (response.ok) {
                 const data = await response.json();
                 this.accounts = data.accounts || [];
+                console.log('Accounts loaded:', this.accounts.length);
             } else {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
@@ -108,7 +117,7 @@ class InstagramDashboard {
         
         this.showLoading(true);
         try {
-            const response = await fetch(`${BOT_API_URL}/api/bot/start`, {
+            const response = await fetch(`${this.BOT_API_URL}/api/bot/start`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -142,7 +151,7 @@ class InstagramDashboard {
         
         this.showLoading(true);
         try {
-            const response = await fetch(`${BOT_API_URL}/api/bot/stop`, {
+            const response = await fetch(`${this.BOT_API_URL}/api/bot/stop`, {
                 method: 'POST'
             });
             
@@ -258,7 +267,7 @@ class InstagramDashboard {
                 <div class="account-info">
                     <div class="account-username">@${account.username}</div>
                     <div class="account-email">${account.temp_email || account.email}</div>
-                    <div class="account-time">${account.created_at}</div>
+                    <div class="account-time">${account.created_at || 'N/A'}</div>
                 </div>
                 <div class="account-status ${account.status}">${account.status}</div>
             </div>
@@ -322,13 +331,33 @@ class InstagramDashboard {
     
     showLoading(show) {
         const overlay = document.getElementById('loading-overlay');
-        overlay.style.display = show ? 'flex' : 'none';
+        if (overlay) {
+            overlay.style.display = show ? 'flex' : 'none';
+        }
     }
     
     showToast(message, type = 'info') {
-        const container = document.getElementById('toast-container');
+        let container = document.getElementById('toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toast-container';
+            container.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 9999;';
+            document.body.appendChild(container);
+        }
+        
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
+        toast.style.cssText = `
+            background: ${type === 'success' ? '#4caf50' : type === 'error' ? '#f44336' : '#2196f3'};
+            color: white;
+            padding: 12px 20px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: slideIn 0.3s ease;
+        `;
         
         const icon = type === 'success' ? 'check-circle' : 
                     type === 'error' ? 'times-circle' : 'info-circle';
@@ -343,19 +372,23 @@ class InstagramDashboard {
         // Auto remove after 5 seconds
         setTimeout(() => {
             if (toast.parentNode) {
-                toast.parentNode.removeChild(toast);
+                toast.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => {
+                    if (toast.parentNode) {
+                        toast.parentNode.removeChild(toast);
+                    }
+                }, 300);
             }
         }, 5000);
     }
     
     startStatusUpdates() {
         // Update status every 30 seconds
+        if (this.updateInterval) clearInterval(this.updateInterval);
         this.updateInterval = setInterval(() => {
-            if (this.isRunning) {
-                this.fetchBotStatus().then(() => {
-                    this.updateUI();
-                });
-            }
+            this.fetchBotStatus().then(() => {
+                this.updateUI();
+            }).catch(err => console.error('Status update failed:', err));
         }, 30000);
     }
     
@@ -375,13 +408,13 @@ document.addEventListener('DOMContentLoaded', () => {
 // Handle page visibility changes
 document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
-        window.dashboard.stopStatusUpdates();
+        if (window.dashboard) window.dashboard.stopStatusUpdates();
     } else {
-        window.dashboard.startStatusUpdates();
+        if (window.dashboard) window.dashboard.startStatusUpdates();
     }
 });
 
 // Handle page unload
 window.addEventListener('beforeunload', () => {
-    window.dashboard.stopStatusUpdates();
+    if (window.dashboard) window.dashboard.stopStatusUpdates();
 });
